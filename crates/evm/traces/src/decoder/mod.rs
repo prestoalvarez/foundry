@@ -11,6 +11,7 @@ use alloy_primitives::{
     map::{hash_map::Entry, HashMap},
     Address, LogData, Selector, B256,
 };
+use alloy_sol_types::sol;
 use foundry_common::{
     abi::get_indexed_event, fmt::format_token, get_contract_name, ContractsByArtifact, SELECTOR_LEN,
 };
@@ -177,17 +178,30 @@ impl CallTraceDecoder {
 
             functions: console::hh::abi::functions()
                 .into_values()
+                .chain(Delegation::abi::functions().into_values())
+                .chain(ERC20::abi::functions().into_values())
+                .chain(EntryPoint::abi::functions().into_values())
                 .chain(Vm::abi::functions().into_values())
                 .flatten()
                 .map(|func| (func.selector(), vec![func]))
                 .collect(),
             events: console::ds::abi::events()
                 .into_values()
+                .chain(ERC20::abi::events().into_values())
+                .chain(Delegation::abi::events().into_values())
+                .chain(EntryPoint::abi::events().into_values())
                 .flatten()
                 .map(|event| ((event.selector(), indexed_inputs(&event)), vec![event]))
                 .collect(),
-            revert_decoder: Default::default(),
-
+            revert_decoder: RevertDecoder {
+                errors: Delegation::abi::errors()
+                    .into_values()
+                    .chain(ERC20::abi::errors().into_values())
+                    .chain(EntryPoint::abi::errors().into_values())
+                    .flatten()
+                    .map(|error| (error.selector(), vec![error]))
+                    .collect(),
+            },
             signature_identifier: None,
             verbosity: 0,
 
@@ -1051,3 +1065,21 @@ mod tests {
         }
     }
 }
+
+sol!(
+    #[sol(abi)]
+    Delegation,
+    "/Users/pc/dev/relay/tests/account/out/Delegation.sol/Delegation.json"
+);
+
+sol!(
+    #[sol(abi)]
+    EntryPoint,
+    "/Users/pc/dev/relay/tests/account/out/EntryPoint.sol/EntryPoint.json"
+);
+
+sol!(
+    #[sol(abi)]
+    ERC20,
+    "/Users/pc/dev/relay/tests/account/out/ERC20.sol/ERC20.json"
+);

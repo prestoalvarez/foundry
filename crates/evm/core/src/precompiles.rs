@@ -60,9 +60,12 @@ pub const ODYSSEY_P256_ADDRESS: Address = address!("0000000000000000000000000000
 /// should be 32 bytes of zeros instead.
 pub fn p256_verify(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     revm_p256_verify(input, gas_limit).map(|mut result| {
-        if result.bytes.is_empty() {
-            result.bytes = B256::default().into();
-        }
+        // if result.bytes.is_empty() {
+        //     result.bytes = B256::default().into();
+        // }
+        assert!(false);
+        dbg!(&result);
+        dbg!("hello");
 
         result
     })
