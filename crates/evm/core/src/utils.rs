@@ -1,11 +1,8 @@
 pub use crate::ic::*;
-use crate::{
-    backend::DatabaseExt, constants::DEFAULT_CREATE2_DEPLOYER_CODEHASH, precompiles::ODYSSEY_P256,
-    InspectorExt,
-};
+use crate::{backend::DatabaseExt, constants::DEFAULT_CREATE2_DEPLOYER_CODEHASH, InspectorExt};
 use alloy_consensus::BlockHeader;
 use alloy_json_abi::{Function, JsonAbi};
-use alloy_network::AnyTxEnvelope;
+use alloy_network::{AnyTxEnvelope, TransactionResponse};
 use alloy_primitives::{Address, Selector, TxKind, B256, U256};
 use alloy_provider::{network::BlockResponse, Network};
 use alloy_rpc_types::{Transaction, TransactionRequest};
@@ -47,6 +44,16 @@ pub fn apply_chain_and_block_specific_env_changes<N: Network>(
                     env.block.difficulty = env.block.prevrandao.unwrap_or_default().into();
                 }
 
+                return;
+            }
+            BinanceSmartChain | BinanceSmartChainTestnet => {
+                // https://github.com/foundry-rs/foundry/issues/9942
+                // As far as observed from the source code of bnb-chain/bsc, the `difficulty` field
+                // is still in use and returned by the corresponding opcode but `prevrandao`
+                // (`mixHash`) is always zero, even though bsc adopts the newer EVM
+                // specification. This will confuse revm and causes emulation
+                // failure.
+                env.block.prevrandao = Some(env.block.difficulty.into());
                 return;
             }
             Moonbeam | Moonbase | Moonriver | MoonbeamDev => {
@@ -92,8 +99,8 @@ pub fn get_function<'a>(
 /// Configures the env for the given RPC transaction.
 /// Accounts for an impersonated transaction by resetting the `env.tx.caller` field to `tx.from`.
 pub fn configure_tx_env(env: &mut revm::primitives::Env, tx: &Transaction<AnyTxEnvelope>) {
-    let impersonated_from = is_impersonated_tx(&tx.inner).then_some(tx.from);
-    if let AnyTxEnvelope::Ethereum(tx) = &tx.inner {
+    let impersonated_from = is_impersonated_tx(&tx.inner).then_some(tx.from());
+    if let AnyTxEnvelope::Ethereum(tx) = &tx.inner.inner() {
         configure_tx_req_env(env, &tx.clone().into(), impersonated_from).expect("cannot fail");
     }
 }
@@ -302,7 +309,7 @@ pub fn odyssey_handler_register<EXT, DB: revm::Database>(handler: &mut EvmHandle
     handler.pre_execution.load_precompiles = Arc::new(move || {
         let mut loaded_precompiles = prev();
 
-        loaded_precompiles.extend([ODYSSEY_P256, P256VERIFY]);
+        loaded_precompiles.extend([P256VERIFY]);
 
         loaded_precompiles
     });

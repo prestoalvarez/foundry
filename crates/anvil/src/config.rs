@@ -1,5 +1,4 @@
 use crate::{
-    cmd::StateFile,
     eth::{
         backend::{
             db::{Db, SerializableState},
@@ -50,7 +49,7 @@ use std::{
     fs::File,
     io,
     net::{IpAddr, Ipv4Addr},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -333,6 +332,17 @@ Genesis Timestamp
             self.get_genesis_timestamp().green()
         );
 
+        let _ = write!(
+            s,
+            r#"
+Genesis Number
+==================
+
+{}
+"#,
+            self.get_genesis_number().green()
+        );
+
         s
     }
 
@@ -410,7 +420,8 @@ impl NodeConfig {
 impl Default for NodeConfig {
     fn default() -> Self {
         // generate some random wallets
-        let genesis_accounts = AccountGenerator::new(10).phrase(DEFAULT_MNEMONIC).gen();
+        let genesis_accounts =
+            AccountGenerator::new(10).phrase(DEFAULT_MNEMONIC).gen().expect("Invalid mnemonic.");
         Self {
             chain_id: None,
             gas_limit: None,
@@ -539,8 +550,9 @@ impl NodeConfig {
 
     /// Loads the init state from a file if it exists
     #[must_use]
-    pub fn with_init_state_path(mut self, path: impl AsRef<Path>) -> Self {
-        self.init_state = StateFile::parse_path(path).ok().and_then(|file| file.state);
+    #[cfg(feature = "cmd")]
+    pub fn with_init_state_path(mut self, path: impl AsRef<std::path::Path>) -> Self {
+        self.init_state = crate::cmd::StateFile::parse_path(path).ok().and_then(|file| file.state);
         self
     }
 
@@ -657,6 +669,11 @@ impl NodeConfig {
         self
     }
 
+    /// Returns the genesis number
+    pub fn get_genesis_number(&self) -> u64 {
+        self.genesis.as_ref().and_then(|g| g.number).unwrap_or(0)
+    }
+
     /// Sets the hardfork
     #[must_use]
     pub fn with_hardfork(mut self, hardfork: Option<ChainHardfork>) -> Self {
@@ -680,11 +697,10 @@ impl NodeConfig {
 
     /// Sets both the genesis accounts and the signer accounts
     /// so that `genesis_accounts == accounts`
-    #[must_use]
-    pub fn with_account_generator(mut self, generator: AccountGenerator) -> Self {
-        let accounts = generator.gen();
+    pub fn with_account_generator(mut self, generator: AccountGenerator) -> eyre::Result<Self> {
+        let accounts = generator.gen()?;
         self.account_generator = Some(generator);
-        self.with_signer_accounts(accounts.clone()).with_genesis_accounts(accounts)
+        Ok(self.with_signer_accounts(accounts.clone()).with_genesis_accounts(accounts))
     }
 
     /// Sets the balance of the genesis accounts in the genesis block
@@ -1031,7 +1047,11 @@ impl NodeConfig {
 
         // if provided use all settings of `genesis.json`
         if let Some(ref genesis) = self.genesis {
-            env.cfg.chain_id = genesis.config.chain_id;
+            // --chain-id flag gets precedence over the genesis.json chain id
+            // <https://github.com/foundry-rs/foundry/issues/10059>
+            if self.chain_id.is_none() {
+                env.cfg.chain_id = genesis.config.chain_id;
+            }
             env.block.timestamp = U256::from(genesis.timestamp);
             if let Some(base_fee) = genesis.base_fee_per_gas {
                 env.block.basefee = U256::from(base_fee);
@@ -1043,6 +1063,7 @@ impl NodeConfig {
         }
 
         let genesis = GenesisConfig {
+            number: self.get_genesis_number(),
             timestamp: self.get_genesis_timestamp(),
             balance: self.genesis_balance,
             accounts: self.genesis_accounts.iter().map(|acc| acc.address()).collect(),
@@ -1160,7 +1181,7 @@ impl NodeConfig {
         };
 
         let block = provider
-            .get_block(BlockNumberOrTag::Number(fork_block_number).into(), false.into())
+            .get_block(BlockNumberOrTag::Number(fork_block_number).into())
             .await
             .wrap_err("failed to get fork block")?;
 
@@ -1351,10 +1372,8 @@ async fn derive_block_and_transactions(
 
             // Get the block pertaining to the fork transaction
             let transaction_block = provider
-                .get_block_by_number(
-                    transaction_block_number.into(),
-                    alloy_rpc_types::BlockTransactionsKind::Full,
-                )
+                .get_block_by_number(transaction_block_number.into())
+                .full()
                 .await?
                 .ok_or_else(|| eyre::eyre!("failed to get fork block by number"))?;
 
@@ -1492,7 +1511,7 @@ impl AccountGenerator {
 }
 
 impl AccountGenerator {
-    pub fn gen(&self) -> Vec<PrivateKeySigner> {
+    pub fn gen(&self) -> eyre::Result<Vec<PrivateKeySigner>> {
         let builder = MnemonicBuilder::<English>::default().phrase(self.phrase.as_str());
 
         // use the derivation path
@@ -1502,10 +1521,10 @@ impl AccountGenerator {
         for idx in 0..self.amount {
             let builder =
                 builder.clone().derivation_path(format!("{derivation_path}{idx}")).unwrap();
-            let wallet = builder.build().unwrap().with_chain_id(Some(self.chain_id));
+            let wallet = builder.build()?.with_chain_id(Some(self.chain_id));
             wallets.push(wallet)
         }
-        wallets
+        Ok(wallets)
     }
 }
 
@@ -1531,7 +1550,7 @@ async fn find_latest_fork_block<P: Provider<AnyNetwork>>(
     // walk back from the head of the chain, but at most 2 blocks, which should be more than enough
     // leeway
     for _ in 0..2 {
-        if let Some(block) = provider.get_block(num.into(), false.into()).await? {
+        if let Some(block) = provider.get_block(num.into()).await? {
             if !block.header.hash.is_zero() {
                 break;
             }

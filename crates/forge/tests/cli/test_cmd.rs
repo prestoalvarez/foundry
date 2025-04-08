@@ -893,17 +893,17 @@ Compiler run successful!
 
 Ran 4 tests for test/ReplayFailures.t.sol:ReplayFailuresTest
 [PASS] testA() ([GAS])
-[FAIL: revert: testB failed] testB() ([GAS])
+[FAIL: testB failed] testB() ([GAS])
 [PASS] testC() ([GAS])
-[FAIL: revert: testD failed] testD() ([GAS])
+[FAIL: testD failed] testD() ([GAS])
 Suite result: FAILED. 2 passed; 2 failed; 0 skipped; [ELAPSED]
 
 Ran 1 test suite [ELAPSED]: 2 tests passed, 2 failed, 0 skipped (4 total tests)
 
 Failing tests:
 Encountered 2 failing tests in test/ReplayFailures.t.sol:ReplayFailuresTest
-[FAIL: revert: testB failed] testB() ([GAS])
-[FAIL: revert: testD failed] testD() ([GAS])
+[FAIL: testB failed] testB() ([GAS])
+[FAIL: testD failed] testD() ([GAS])
 
 Encountered a total of 2 failing tests, 2 tests succeeded
 
@@ -917,16 +917,16 @@ Encountered a total of 2 failing tests, 2 tests succeeded
 No files changed, compilation skipped
 
 Ran 2 tests for test/ReplayFailures.t.sol:ReplayFailuresTest
-[FAIL: revert: testB failed] testB() ([GAS])
-[FAIL: revert: testD failed] testD() ([GAS])
+[FAIL: testB failed] testB() ([GAS])
+[FAIL: testD failed] testD() ([GAS])
 Suite result: FAILED. 0 passed; 2 failed; 0 skipped; [ELAPSED]
 
 Ran 1 test suite [ELAPSED]: 0 tests passed, 2 failed, 0 skipped (2 total tests)
 
 Failing tests:
 Encountered 2 failing tests in test/ReplayFailures.t.sol:ReplayFailuresTest
-[FAIL: revert: testB failed] testB() ([GAS])
-[FAIL: revert: testD failed] testD() ([GAS])
+[FAIL: testB failed] testB() ([GAS])
+[FAIL: testD failed] testD() ([GAS])
 
 Encountered a total of 2 failing tests, 0 tests succeeded
 
@@ -2123,8 +2123,8 @@ forgetest_init!(should_generate_junit_xml_report, |prj, cmd| {
             <system-out>[FAIL: panic: assertion failed (0x01)] test_junit_assert_fail() ([GAS])</system-out>
         </testcase>
         <testcase name="test_junit_revert_fail()" time="[..]">
-            <failure message="revert: Revert"/>
-            <system-out>[FAIL: revert: Revert] test_junit_revert_fail() ([GAS])</system-out>
+            <failure message="Revert"/>
+            <system-out>[FAIL: Revert] test_junit_revert_fail() ([GAS])</system-out>
         </testcase>
         <system-out>Suite result: FAILED. 0 passed; 2 failed; 0 skipped; [ELAPSED]</system-out>
     </testsuite>
@@ -3167,4 +3167,357 @@ Failing tests:
 Encountered 1 failing test in test/TestDeploymentFailure.t.sol:TestDeploymentFailure
 [FAIL: EvmError: Revert] constructor() ([GAS])
 ..."#]]);
+});
+
+// <https://github.com/foundry-rs/foundry/issues/10012>
+forgetest_init!(state_diff_recording_with_revert, |prj, cmd| {
+    prj.add_test(
+        "TestStateDiffRevertFailure.t.sol",
+        r#"
+import "forge-std/Test.sol";
+contract StateDiffRevertAtSameDepthTest is Test {
+    function test_something() public {
+        CounterTestA counter = new CounterTestA();
+        counter.doSomething();
+    }
+}
+
+contract CounterTestA is Test {
+    function doSomething() public {
+        vm.startStateDiffRecording();
+        require(1 > 2);
+    }
+}
+    "#,
+    )
+    .unwrap();
+
+    cmd.args(["t", "--mt", "test_something"]).assert_failure();
+});
+
+// <https://github.com/foundry-rs/foundry/issues/5521>
+forgetest_init!(should_apply_pranks_per_recorded_depth, |prj, cmd| {
+    prj.add_test(
+        "Counter.t.sol",
+        r#"
+import "forge-std/Test.sol";
+contract CounterTest is Test {
+    function test_stackPrank() public {
+        address player = makeAddr("player");
+        SenderLogger senderLogger = new SenderLogger();
+        Contract c = new Contract();
+
+        senderLogger.log(); // Log(ContractTest, DefaultSender)
+        vm.startPrank(player, player);
+        senderLogger.log(); // Log(player, player)
+        c.f(); // vm.startPrank(player)
+        senderLogger.log(); // Log(ContractTest, player) <- ContractTest should be player
+        vm.stopPrank();
+    }
+}
+
+contract Contract {
+    Vm public constant vm = Vm(address(bytes20(uint160(uint256(keccak256("hevm cheat code"))))));
+
+    function f() public {
+        vm.startPrank(msg.sender);
+    }
+}
+
+contract SenderLogger {
+    event Log(address, address);
+
+    function log() public {
+        emit Log(msg.sender, tx.origin);
+    }
+}
+    "#,
+    )
+    .unwrap();
+    // Emits
+    // Log(: player: [], : player: []) instead
+    // Log(: ContractTest: [], : player: [])
+    cmd.args(["test", "--mt", "test_stackPrank", "-vvvv"]).assert_success().stdout_eq(str![[r#"
+[COMPILING_FILES] with [SOLC_VERSION]
+[SOLC_VERSION] [ELAPSED]
+Compiler run successful!
+
+Ran 1 test for test/Counter.t.sol:CounterTest
+[PASS] test_stackPrank() ([GAS])
+Traces:
+  [..] CounterTest::test_stackPrank()
+    ├─ [..] VM::addr(<pk>) [staticcall]
+    │   └─ ← [Return] player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C]
+    ├─ [..] VM::label(player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C], "player")
+    │   └─ ← [Return]
+    ├─ [..] → new SenderLogger@0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f
+    │   └─ ← [Return] 255 bytes of code
+    ├─ [..] → new Contract@0x2e234DAe75C793f67A35089C9d99245E1C58470b
+    │   └─ ← [Return] 542 bytes of code
+    ├─ [..] SenderLogger::log()
+    │   ├─ emit Log(: CounterTest: [0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496], : DefaultSender: [0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38])
+    │   └─ ← [Stop]
+    ├─ [..] VM::startPrank(player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C], player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C])
+    │   └─ ← [Return]
+    ├─ [..] SenderLogger::log()
+    │   ├─ emit Log(: player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C], : player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C])
+    │   └─ ← [Stop]
+    ├─ [..] Contract::f()
+    │   ├─ [..] VM::startPrank(player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C])
+    │   │   └─ ← [Return]
+    │   └─ ← [Stop]
+    ├─ [..] SenderLogger::log()
+    │   ├─ emit Log(: player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C], : player: [0x44E97aF4418b7a17AABD8090bEA0A471a366305C])
+    │   └─ ← [Stop]
+    ├─ [..] VM::stopPrank()
+    │   └─ ← [Return]
+    └─ ← [Stop]
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; [ELAPSED]
+
+Ran 1 test suite [ELAPSED]: 1 tests passed, 0 failed, 0 skipped (1 total tests)
+
+"#]]);
+});
+
+// <https://github.com/foundry-rs/foundry/issues/10060>
+forgetest_init!(should_redact_pk_in_sign_delegation, |prj, cmd| {
+    prj.add_test(
+        "Counter.t.sol",
+        r#"
+import "forge-std/Test.sol";
+contract CounterTest is Test {
+    function testCheckDelegation() external {
+        (address alice, uint256 key) = makeAddrAndKey("alice");
+        vm.signDelegation(address(0), key);
+        vm.signAndAttachDelegation(address(0), key);
+    }
+}
+    "#,
+    )
+    .unwrap();
+
+    cmd.args(["test", "--mt", "testCheckDelegation", "-vvvv"]).assert_success().stdout_eq(str![[r#"
+...
+Ran 1 test for test/Counter.t.sol:CounterTest
+[PASS] testCheckDelegation() ([GAS])
+Traces:
+  [..] CounterTest::testCheckDelegation()
+    ├─ [0] VM::addr(<pk>) [staticcall]
+    │   └─ ← [Return] alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6]
+    ├─ [0] VM::label(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6], "alice")
+    │   └─ ← [Return]
+    ├─ [0] VM::signDelegation(0x0000000000000000000000000000000000000000, "<pk>")
+    │   └─ ← [Return] (0, 0x3d6ad67cc3dc94101a049f85f96937513a05485ae0f8b27545d25c4f71b12cf9, 0x3c0f2d62834f59d6ef0209e8a935f80a891a236eb18ac0e3700dd8f7ac8ae279, 0, 0x0000000000000000000000000000000000000000)
+    ├─ [0] VM::signAndAttachDelegation(0x0000000000000000000000000000000000000000, "<pk>")
+    │   └─ ← [Return] (0, 0x3d6ad67cc3dc94101a049f85f96937513a05485ae0f8b27545d25c4f71b12cf9, 0x3c0f2d62834f59d6ef0209e8a935f80a891a236eb18ac0e3700dd8f7ac8ae279, 0, 0x0000000000000000000000000000000000000000)
+    └─ ← [Stop]
+...
+
+"#]]);
+});
+
+// <https://github.com/foundry-rs/foundry/issues/10068>
+forgetest_init!(can_upload_selectors_with_path, |prj, cmd| {
+    prj.add_source(
+        "CounterV1.sol",
+        r#"
+contract Counter {
+    uint256 public number;
+
+    function setNumberV1(uint256 newNumber) public {
+        number = newNumber;
+    }
+
+    function incrementV1() public {
+        number++;
+    }
+}
+    "#,
+    )
+    .unwrap();
+
+    prj.add_source(
+        "CounterV2.sol",
+        r#"
+contract CounterV2 {
+    uint256 public number;
+
+    function setNumberV2(uint256 newNumber) public {
+        number = newNumber;
+    }
+
+    function incrementV2() public {
+        number++;
+    }
+}
+    "#,
+    )
+    .unwrap();
+
+    // Upload Counter without path fails as there are multiple contracts with same name.
+    cmd.args(["selectors", "upload", "Counter"]).assert_failure().stderr_eq(str![[r#"
+...
+Error: Multiple contracts found with the name `Counter`
+...
+
+"#]]);
+
+    // Upload without contract name should fail.
+    cmd.forge_fuse().args(["selectors", "upload", "src/Counter.sol"]).assert_failure().stderr_eq(
+        str![[r#"
+...
+Error: No contract name provided.
+...
+
+"#]],
+    );
+
+    // Upload single CounterV2.
+    cmd.forge_fuse().args(["selectors", "upload", "CounterV2"]).assert_success().stdout_eq(str![[
+        r#"
+...
+Uploading selectors for CounterV2...
+...
+Selectors successfully uploaded to OpenChain
+...
+
+"#
+    ]]);
+
+    // Upload CounterV1 with path.
+    cmd.forge_fuse()
+        .args(["selectors", "upload", "src/CounterV1.sol:Counter"])
+        .assert_success()
+        .stdout_eq(str![[r#"
+...
+Uploading selectors for Counter...
+...
+Selectors successfully uploaded to OpenChain
+...
+
+"#]]);
+
+    // Upload Counter with path.
+    cmd.forge_fuse()
+        .args(["selectors", "upload", "src/Counter.sol:Counter"])
+        .assert_success()
+        .stdout_eq(str![[r#"
+...
+Uploading selectors for Counter...
+...
+Selectors successfully uploaded to OpenChain
+...
+
+"#]]);
+});
+
+// tests `interceptInitcode` function
+forgetest_init!(intercept_initcode, |prj, cmd| {
+    prj.wipe_contracts();
+    prj.insert_ds_test();
+    prj.insert_vm();
+    prj.clear();
+
+    prj.add_source(
+        "InterceptInitcode.t.sol",
+        r#"
+import {Vm} from "./Vm.sol";
+import {DSTest} from "./test.sol";
+
+contract SimpleContract {
+    uint256 public value;
+    constructor(uint256 _value) {
+        value = _value;
+    }
+}
+
+contract InterceptInitcodeTest is DSTest {
+    Vm vm = Vm(HEVM_ADDRESS);
+
+    function testInterceptRegularCreate() public {
+        // Set up interception
+        vm.interceptInitcode();
+
+        // Try to create a contract - this should revert with the initcode
+        bytes memory initcode;
+        try new SimpleContract(42) {
+            assert(false);
+        } catch (bytes memory interceptedInitcode) {
+            initcode = interceptedInitcode;
+        }
+
+        // Verify the initcode contains the constructor argument
+        assertTrue(initcode.length > 0, "initcode should not be empty");
+
+        // The constructor argument is encoded as a 32-byte value at the end of the initcode
+        // We need to convert the last 32 bytes to uint256
+        uint256 value;
+        assembly {
+            value := mload(add(add(initcode, 0x20), sub(mload(initcode), 32)))
+        }
+        assertEq(value, 42, "initcode should contain constructor arg");
+    }
+
+    function testInterceptCreate2() public {
+        // Set up interception
+        vm.interceptInitcode();
+
+        // Try to create a contract with CREATE2 - this should revert with the initcode
+        bytes memory initcode;
+        try new SimpleContract(1337) {
+            assert(false);
+        } catch (bytes memory interceptedInitcode) {
+            initcode = interceptedInitcode;
+        }
+
+        // Verify the initcode contains the constructor argument
+        assertTrue(initcode.length > 0, "initcode should not be empty");
+
+        // The constructor argument is encoded as a 32-byte value at the end of the initcode
+        uint256 value;
+        assembly {
+            value := mload(add(add(initcode, 0x20), sub(mload(initcode), 32)))
+        }
+        assertEq(value, 1337, "initcode should contain constructor arg");
+    }
+
+    function testInterceptMultiple() public {
+        // First interception
+        vm.interceptInitcode();
+        bytes memory initcode1;
+        try new SimpleContract(1) {
+            assert(false);
+        } catch (bytes memory interceptedInitcode) {
+            initcode1 = interceptedInitcode;
+        }
+
+        // Second interception
+        vm.interceptInitcode();
+        bytes memory initcode2;
+        try new SimpleContract(2) {
+            assert(false);
+        } catch (bytes memory interceptedInitcode) {
+            initcode2 = interceptedInitcode;
+        }
+
+        // Verify different initcodes
+        assertTrue(initcode1.length > 0, "first initcode should not be empty");
+        assertTrue(initcode2.length > 0, "second initcode should not be empty");
+
+        // Extract constructor arguments from both initcodes
+        uint256 value1;
+        uint256 value2;
+        assembly {
+            value1 := mload(add(add(initcode1, 0x20), sub(mload(initcode1), 32)))
+            value2 := mload(add(add(initcode2, 0x20), sub(mload(initcode2), 32)))
+        }
+        assertEq(value1, 1, "first initcode should contain first arg");
+        assertEq(value2, 2, "second initcode should contain second arg");
+    }
+}
+     "#,
+    )
+    .unwrap();
+    cmd.args(["test", "-vvvvv"]).assert_success();
 });
