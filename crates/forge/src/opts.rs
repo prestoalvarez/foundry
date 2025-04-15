@@ -167,6 +167,9 @@ pub enum ForgeSubcommand {
 
     /// Generate bindings for serialization/deserialization of project structs via JSON cheatcodes.
     BindJson(bind_json::BindJsonArgs),
+
+    #[command(hide = true)]
+    MarkdownHelp,
 }
 
 #[cfg(test)]

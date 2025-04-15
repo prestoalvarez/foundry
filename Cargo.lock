@@ -985,6 +985,7 @@ dependencies = [
  "axum",
  "chrono",
  "clap",
+ "clap-markdown",
  "clap_complete",
  "clap_complete_fig",
  "ctrlc",
@@ -2120,6 +2121,7 @@ dependencies = [
  "aws-sdk-kms",
  "chrono",
  "clap",
+ "clap-markdown",
  "clap_complete",
  "clap_complete_fig",
  "comfy-table",
@@ -2199,6 +2201,7 @@ dependencies = [
  "alloy-json-abi",
  "alloy-primitives",
  "clap",
+ "clap-markdown",
  "dirs",
  "eyre",
  "forge-fmt",
@@ -2296,6 +2299,15 @@ checksum = "2df961d8c8a0d08aa9945718ccf584145eee3f3aa06cddbeac12933781102e04"
 dependencies = [
  "clap_builder",
  "clap_derive",
+]
+
+[[package]]
+name = "clap-markdown"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ebc67e6266e14f8b31541c2f204724fa2ac7ad5c17d6f5908fbb92a60f42cff"
+dependencies = [
+ "clap",
 ]
 
 [[package]]
@@ -3465,6 +3477,7 @@ dependencies = [
  "axum",
  "chrono",
  "clap",
+ "clap-markdown",
  "clap_complete",
  "clap_complete_fig",
  "clearscreen",

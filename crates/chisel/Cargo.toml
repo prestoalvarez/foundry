@@ -39,6 +39,7 @@ alloy-primitives = { workspace = true, features = [
 alloy-json-abi.workspace = true
 
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+clap-markdown = "0.1"
 dirs.workspace = true
 eyre.workspace = true
 regex.workspace = true

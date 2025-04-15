@@ -68,4 +68,7 @@ pub enum ChiselSubcommand {
         /// The command to be evaluated.
         command: String,
     },
+
+    #[command(hide = true)]
+    MarkdownHelp,
 }

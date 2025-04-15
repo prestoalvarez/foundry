@@ -1059,6 +1059,9 @@ pub enum CastSubcommand {
         #[command(subcommand)]
         command: TxPoolSubcommands,
     },
+
+    #[command(hide = true)]
+    MarkdownHelp,
 }
 
 /// CLI arguments for `cast --to-base`.

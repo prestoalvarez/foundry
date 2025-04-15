@@ -41,6 +41,9 @@ pub fn run_command(args: Anvil) -> Result<()> {
                 "anvil",
                 &mut std::io::stdout(),
             ),
+            AnvilSubcommand::MarkdownHelp => {
+                sh_println!("{}", clap_markdown::help_markdown::<Anvil>())?;
+            }
         }
         return Ok(())
     }

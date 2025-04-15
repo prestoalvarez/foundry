@@ -150,5 +150,9 @@ pub fn run_command(args: Forge) -> Result<()> {
         ForgeSubcommand::Soldeer(cmd) => utils::block_on(cmd.run()),
         ForgeSubcommand::Eip712(cmd) => cmd.run(),
         ForgeSubcommand::BindJson(cmd) => cmd.run(),
+        ForgeSubcommand::MarkdownHelp => {
+            sh_println!("{}", clap_markdown::help_markdown::<Forge>())?;
+            Ok(())
+        }
     }
 }

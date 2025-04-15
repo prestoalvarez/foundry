@@ -42,7 +42,7 @@ alloy-provider = { workspace = true, features = [
     "ws",
     "ipc",
     "trace-api",
-    "txpool-api"
+    "txpool-api",
 ] }
 alloy-rlp.workspace = true
 alloy-rpc-types = { workspace = true, features = ["eth", "trace"] }
@@ -67,6 +67,7 @@ aws-sdk-kms = { version = "1", default-features = false, optional = true }
 foundry-cli.workspace = true
 
 clap = { version = "4", features = ["derive", "env", "unicode", "wrap_help"] }
+clap-markdown = "0.1"
 clap_complete = "4"
 clap_complete_fig = "4"
 comfy-table.workspace = true

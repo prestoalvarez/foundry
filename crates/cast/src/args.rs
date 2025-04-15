@@ -705,6 +705,9 @@ pub async fn run_command(args: CastArgs) -> Result<()> {
             sh_println!("{}", SimpleCast::decode_eof(&eof)?)?
         }
         CastSubcommand::TxPool { command } => command.run().await?,
+        CastSubcommand::MarkdownHelp => {
+            sh_println!("{}", clap_markdown::help_markdown::<CastArgs>())?;
+        }
     };
 
     /// Prints slice of tokens using [`format_tokens`] or [`format_tokens_raw`] depending whether

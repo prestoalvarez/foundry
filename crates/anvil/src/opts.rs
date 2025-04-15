@@ -30,4 +30,7 @@ pub enum AnvilSubcommand {
     /// Generate Fig autocompletion spec.
     #[command(visible_alias = "fig")]
     GenerateFigSpec,
+
+    #[command(hide = true)]
+    MarkdownHelp,
 }

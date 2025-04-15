@@ -112,6 +112,10 @@ pub async fn run_command(args: Chisel) -> Result<()> {
             dispatch_repl_line(&mut dispatcher, command).await?;
             return Ok(())
         }
+        Some(ChiselSubcommand::MarkdownHelp) => {
+            sh_println!("{}", clap_markdown::help_markdown::<Chisel>())?;
+            return Ok(())
+        }
         None => { /* No chisel subcommand present; Continue */ }
     }
 
