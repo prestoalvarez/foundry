@@ -181,6 +181,7 @@ impl CallTraceDecoder {
                 .chain(Delegation::abi::functions().into_values())
                 .chain(ERC20::abi::functions().into_values())
                 .chain(EntryPoint::abi::functions().into_values())
+                .chain(Simulator::abi::functions().into_values())
                 .chain(Vm::abi::functions().into_values())
                 .flatten()
                 .map(|func| (func.selector(), vec![func]))
@@ -190,6 +191,7 @@ impl CallTraceDecoder {
                 .chain(ERC20::abi::events().into_values())
                 .chain(Delegation::abi::events().into_values())
                 .chain(EntryPoint::abi::events().into_values())
+                .chain(Simulator::abi::events().into_values())
                 .flatten()
                 .map(|event| ((event.selector(), indexed_inputs(&event)), vec![event]))
                 .collect(),
@@ -198,6 +200,7 @@ impl CallTraceDecoder {
                     .into_values()
                     .chain(ERC20::abi::errors().into_values())
                     .chain(EntryPoint::abi::errors().into_values())
+                    .chain(Simulator::abi::errors().into_values())
                     .flatten()
                     .map(|error| (error.selector(), vec![error]))
                     .collect(),
@@ -1091,3 +1094,16 @@ sol!(
     ERC20,
     "/Users/pc/dev/relay/tests/account/out/ERC20.sol/ERC20.json"
 );
+
+sol!(
+    #[sol(abi)]
+    Simulator,
+    "/Users/pc/dev/relay/tests/account/out/Simulator.sol/Simulator.json"
+);
+
+sol!(
+    #[sol(abi)]
+    PauseAuthority,
+    "/Users/pc/dev/relay/tests/account/out/PauseAuthority.sol/PauseAuthority.json"
+);
+
