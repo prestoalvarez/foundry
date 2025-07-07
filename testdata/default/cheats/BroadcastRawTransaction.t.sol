@@ -18,6 +18,10 @@ contract BroadcastRawTransactionTest is DSTest {
     }
 
     function test_revert_wrong_chainid() public {
+        // Fund the account that will send the transaction to ensure we get chain ID error, not funds error
+        address from = 0x5316812db67073C4d4af8BB3000C5B86c2877e94;
+        vm.deal(from, 1 ether);
+        
         vm._expectCheatcodeRevert("transaction validation error: invalid chain ID");
         vm.broadcastRawTransaction(
             hex"f860806483030d40946fd0a0cff9a87adf51695b40b4fa267855a8f4c6118025a03ebeabbcfe43c2c982e99b376b5fb6e765059d7f215533c8751218cac99bbd80a00a56cf5c382442466770a756e81272d06005c9e90fb8dbc5b53af499d5aca856"
